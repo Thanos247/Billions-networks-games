@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Billion network</title>
+<style>
+:root{--bg:#0b1020;--panel:#0f1724;--accent:#60a5fa;--danger:#f87171;--muted:#94a3b8}
+html,body{height:100%;margin:0;font-family:Inter, system-ui, Arial, sans-serif;background:var(--bg);color:#e6eef8}
+#game-wrap{display:flex;flex-direction:column;align-items:center;gap:12px;padding:18px}
+canvas{border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,.7)}
+.hud{display:flex;gap:12px;align-items:center}
+.panel{background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:10px;font-size:14px;color:var(--muted)}
+#controls{max-width:920px;text-align:left;color:var(--muted);font-size:13px}
+button{background:var(--accent);border:none;color:#022;padding:8px 12px;border-radius:8px;font-weight:700;cursor:pointer}
+button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);font-weight:600}
+footer{margin-top:6px;color:rgba(230,238,248,0.5);font-size:12px}
+@media (max-width:640px){canvas{width:92vw;height:60vh}}
+</style>
+</head>
+<body>
+<div id="game-wrap">
+<h2 style="margin:0">Billion network</h2>
+<div class="hud">
+  <div class="panel">Score: <span id="score">0</span></div>
+  <div class="panel">Lives: <span id="lives">3</span></div>
+  <div class="panel">Level: <span id="level">1</span></div>
+  <div style="display:flex;gap:8px;margin-left:8px"><button id="pauseBtn">pause</button><button id="restartBtn" class="secondary">restart</button></div>
+</div>
+<canvas id="game" width="900" height="600"></canvas>
+<div id="controls">
+  controls: move with <strong>WASD</strong> or <strong>arrow keys</strong>. aim with mouse. left-click or <strong>space</strong> to shoot. pause with <strong>p</strong>.
+  <div style="margin-top:6px;color:var(--muted)">This is a compact, well-documented single-file game — copy the file into <code>index.html</code> and open in your browser.</div>
+</div>
+<footer>Made for you — tweak spawn rates, colors, or add images/sounds as you like.</footer>
+</div>
+
+<!-- Background Music -->
+<audio id="bg-music" loop>
+  <source src="https://s17.aconvert.com/convert/p3r68-cdx67/xsez2-x8ged.mp3" type="audio/mp3">
+  Your browser does not support the audio element.
+</audio>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W = canvas.width, H = canvas.height;
+const scoreEl = document.getElementById('score');
+const livesEl = document.getElementById('lives');
+const levelEl = document.getElementById('level');
+const pauseBtn = document.getElementById('pauseBtn');
+const restartBtn = document.getElementById('restartBtn');
+const bgMusic = document.getElementById('bg-music');
+
+function resizeCanvas(){
+  const maxW = Math.min(window.innerWidth - 36, 1200);
+  canvas.style.width = Math.floor(maxW) + 'px';
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+const rand = (a,b)=> Math.random()*(b-a)+a;
+let mouse = {x:W/2,y:H/2,down:false};
+let keys = {};
+let bullets = [];
+let enemies = [];
+let particles = [];
+let score = 0, lives = 3, level = 1;
+let running = true, paused = false;
+let lastShot = 0, SHOT_COOLDOWN = 180;
+let lastFrame = performance.now();
+let spawnTimer = 0, spawnInterval = 1400;
+
+const player = { x: W/2, y: H/2, r: 16, speed: 240, angle: 0 };
+const playerImg = new Image();
+playerImg.src = 'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/download.png';
+
+// Load background image
+const bgImg = new Image();
+bgImg.src = 'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/simple-effective-visual-representation-progress_998587-6506.jpg';
+
+// Load enemy images
+const enemyImages = [
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/photo_2025-09-27_18-41-56.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/photo_2025-09-27_18-42-03.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/photo_2025-09-27_18-42-06.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/photo_2025-09-27_18-42-09.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/QZe8cSsQ_400x400.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/MqtltScV_400x400.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/8iEwemxh_400x400.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/cBHRSZPI_400x400.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/dmMw1t9U_400x400.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/sChB25cc_400x400.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/tPTZUQ84_400x400.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/4lpCqvF-_400x400.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/Roiu_uVc_400x400.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/mj5O04KV_400x400.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xxzz93r/HnTKuH6j_400x400.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xyzu789/20250928_014235.jpg',
+  'https://uploads.onecompiler.io/43xxy275h/43xyzu789/20250928_020742.jpg',
+  // NEW ENEMY IMAGE
+  'https://uploads.onecompiler.io/43xxy275h/43y2bthq8/photo_2025-09-27_20-09-42.jpg'
+].map(url=>{ const img=new Image(); img.src=url; return img; });
+
+// --- MUSIC CONTROL ---
+let musicStarted = false;
+function startMusic() {
+  if(!musicStarted){
+    bgMusic.currentTime = 0;
+    bgMusic.play().catch(()=>{});
+    musicStarted = true;
+  }
+  document.removeEventListener('keydown', startMusic);
+  document.removeEventListener('mousedown', startMusic);
+  document.removeEventListener('touchstart', startMusic);
+}
+document.addEventListener('keydown', startMusic);
+document.addEventListener('mousedown', startMusic);
+document.addEventListener('touchstart', startMusic);
+
+// --- GAME LOGIC ---
+canvas.addEventListener('mousemove', e=>{
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = (e.clientX - rect.left) * canvas.width / rect.width;
+  mouse.y = (e.clientY - rect.top) * canvas.height / rect.height;
+});
+canvas.addEventListener('mousedown', ()=> mouse.down=true);
+canvas.addEventListener('mouseup', ()=> mouse.down=false);
+window.addEventListener('keydown', e=>{
+  keys[e.key.toLowerCase()] = true;
+  if(e.key===' '){ e.preventDefault(); shoot(); }
+  if(e.key.toLowerCase()==='p') togglePause();
+});
+window.addEventListener('keyup', e=> keys[e.key.toLowerCase()] = false);
+pauseBtn.addEventListener('click', togglePause);
+restartBtn.addEventListener('click', restartGame);
+
+function togglePause() {
+  paused = !paused;
+  pauseBtn.textContent = paused ? 'resume' : 'pause';
+  if(paused) bgMusic.pause();
+  else if(running) bgMusic.play().catch(()=>{});
+}
+
+function restartGame() {
+  score=0; lives=3; level=1; bullets=[]; enemies=[]; particles=[]; running=true; paused=false;
+  player.x=W/2; player.y=H/2;
+  pauseBtn.textContent = 'pause';
+  bgMusic.currentTime = 0;
+  bgMusic.play().catch(()=>{});
+}
+
+function shoot(){
+  const now = performance.now();
+  if(now - lastShot < SHOT_COOLDOWN) return; lastShot=now;
+  const angle = Math.atan2(mouse.y-player.y, mouse.x-player.x);
+  const speed = 650;
+  bullets.push({x:player.x+Math.cos(angle)*(player.r+6), y:player.y+Math.sin(angle)*(player.r+6), vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed, r:4, life:1200, born:now});
+}
+
+function spawnEnemy(){
+  const edge=Math.floor(rand(0,4));
+  let ex=0, ey=0;
+  if(edge===0){ ex = rand(-30, W+30); ey = -40; }
+  else if(edge===1){ ex = rand(-30, W+30); ey = H+40; }
+  else if(edge===2){ ex = -40; ey = rand(-30,H+30); }
+  else { ex = W+40; ey = rand(-30,H+30); }
+  const size=Math.floor(rand(12,28));
+  const hp=Math.max(1,Math.round(level*rand(0.8,1.6)));
+  enemies.push({x:ex, y:ey, r:size, hp, maxHp:hp, speed:rand(40+level*6,70+level*12), img:enemyImages[Math.floor(rand(0,enemyImages.length))]});
+}
+
+function emitParticles(x,y,color,count=12){
+  for(let i=0;i<count;i++){
+    const a = rand(0,Math.PI*2); const s = rand(40,300);
+    particles.push({x,y,vx:Math.cos(a)*s, vy:Math.sin(a)*s, life: rand(400,1000), born:performance.now(), r: rand(1,3), color});
+  }
+}
+
+function update(dt){
+  if(paused) return;
+  let dx=0, dy=0; if(keys['w']||keys['arrowup']) dy-=1; if(keys['s']||keys['arrowdown']) dy+=1; if(keys['a']||keys['arrowleft']) dx-=1; if(keys['d']||keys['arrowright']) dx+=1;
+  if(dx!==0 || dy!==0){ const len=Math.hypot(dx,dy); dx/=len; dy/=len; player.x+=dx*player.speed*dt; player.y+=dy*player.speed*dt; }
+  player.x = Math.max(player.r, Math.min(W-player.r, player.x));
+  player.y = Math.max(player.r, Math.min(H-player.r, player.y));
+  player.angle=Math.atan2(mouse.y-player.y, mouse.x-player.x);
+  if(mouse.down) shoot();
+
+  const now=performance.now();
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i]; b.x+=b.vx*dt; b.y+=b.vy*dt;
+    if(now-b.born>b.life || b.x<-50 || b.x>W+50 || b.y<-50 || b.y>H+50) bullets.splice(i,1);
+  }
+
+  for(let i=enemies.length-1;i>=0;i--){
+    const e=enemies[i];
+    const ang=Math.atan2(player.y-e.y, player.x-e.x);
+    e.x+=Math.cos(ang)*e.speed*dt; e.y+=Math.sin(ang)*e.speed*dt;
+
+    for(let j=bullets.length-1;j>=0;j--){
+      const b=bullets[j];
+      if((b.x-e.x)**2+(b.y-e.y)**2<(b.r+e.r)**2){
+        bullets.splice(j,1); e.hp-=1; emitParticles(b.x,b.y,'#fff',6);
+        if(e.hp<=0){ score+=1; emitParticles(e.x,e.y,'#f87171',18); enemies.splice(i,1);}
+        break;
+      }
+    }
+
+    if((player.x-e.x)**2+(player.y-e.y)**2<(player.r+e.r)**2){
+      enemies.splice(i,1); lives-=1; emitParticles(player.x,player.y,'#f59e0b',28);
+      if(lives<=0){ running=false; bgMusic.pause(); }
+    }
+  }
+
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i]; const t=now-p.born;
+    if(t>p.life){particles.splice(i,1); continue;}
+    p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=200*dt;
+  }
+
+  spawnTimer+=dt*1000;
+  if(spawnTimer>=spawnInterval){ spawnTimer=0; spawnEnemy(); }
+
+  const newLevel=Math.floor(score/50)+1;
+  if(newLevel!==level){ level=newLevel; spawnInterval=Math.max(200,1000-(level-1)*120); }
+
+  scoreEl.textContent=score; livesEl.textContent=lives; levelEl.textContent=level;
+}
+
+function draw(){
+  if(bgImg.complete) ctx.drawImage(bgImg,0,0,W,H);
+  else ctx.clearRect(0,0,W,H);
+
+  ctx.save(); ctx.globalAlpha=0.06; ctx.strokeStyle='#bcd'; ctx.lineWidth=1;
+  for(let gx=0;gx<W;gx+=60){ ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,H); ctx.stroke();}
+  for(let gy=0;gy<H;gy+=60){ ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke();}
+  ctx.restore();
+
+  ctx.save(); ctx.translate(player.x,player.y); ctx.rotate(player.angle); ctx.drawImage(playerImg,-player.r*1.5,-player.r*1.5,player.r*3,player.r*3); ctx.restore();
+
+  for(const b of bullets){ ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); }
+
+  for(const e of enemies){
+    ctx.save(); ctx.translate(e.x,e.y); ctx.drawImage(e.img,-e.r,-e.r,e.r*2,e.r*2); ctx.restore();
+    const pct=e.hp/e.maxHp; ctx.beginPath(); ctx.arc(e.x,e.y,e.r+3,-Math.PI/2,-Math.PI/2+pct*Math.PI*2); ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.stroke();
+  }
+
+  for(const p of particles){
+    ctx.globalAlpha=Math.max(0,1-((performance.now()-p.born)/p.life));
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fillStyle=p.color||'#fff'; ctx.fill(); ctx.globalAlpha=1;
+  }
+
+  ctx.beginPath(); ctx.arc(mouse.x,mouse.y,8,0,Math.PI*2); ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=2; ctx.stroke();
+}
+
+function gameLoop(now){
+  const dt=Math.min(0.05,(now-lastFrame)/1000); lastFrame=now;
+  if(running && !paused) update(dt); draw();
+  if(!running){
+    ctx.save(); ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.font='32px system-ui'; ctx.fillText('game over',W/2,H/2-10);
+    ctx.font='18px system-ui'; ctx.fillStyle='#cbd5e1'; ctx.fillText('press restart to play again',W/2,H/2+20);
+    ctx.restore();
+  }
+  requestAnimationFrame(gameLoop);
+}
+requestAnimationFrame(gameLoop);
+
+document.addEventListener('keydown',e=>{ if(e.key===' '){ e.preventDefault(); } });
+let touchId=null;
+canvas.addEventListener('touchstart',e=>{
+  const t=e.changedTouches[0]; touchId=t.identifier;
+  const rect=canvas.getBoundingClientRect(); mouse.x=(t.clientX-rect.left)*(canvas.width/rect.width); mouse.y=(t.clientY-rect.top)*(canvas.height/rect.height); mouse.down=true; shoot(); e.preventDefault();
+});
+canvas.addEventListener('touchmove',e=>{
+  const t=Array.from(e.changedTouches).find(d=>d.identifier===touchId) || e.changedTouches[0]; if(!t) return;
+  const rect=canvas.getBoundingClientRect(); mouse.x=(t.clientX-rect.left)*(canvas.width/rect.width); mouse.y=(t.clientY-rect.top)*(canvas.height/rect.height);
+});
+canvas.addEventListener('touchend',e=>{ mouse.down=false; touchId=null; });
+
+function capArrays(){ if(particles.length>800) particles.splice(0, particles.length-700); if(bullets.length>200) bullets.splice(0, bullets.length-100); if(enemies.length>120) enemies.splice(0, enemies.length-80); }
+setInterval(capArrays,800);
+console.log('Top-Down Shooter loaded — controls: WASD/arrows to move, mouse to aim, click/space to shoot.');
+</script>
+</body>
+</html>
